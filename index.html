@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Indoor Ride Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: focused training tool, plain-spoken, numbers first
+   IDEA: the bike's own console readout, plus a rider's logbook
+   PICTURE: the live console panel: huge power figure, cadence/HR/time tiles, scrolling trace
+   COLOUR and TYPE: graphite console, white/near-black page, effort orange accent, heart pink-red; Barlow Condensed numerals + Barlow
+   LAYOUT: console band at top as the picture, week figures beside title, then trends, log, import */
+:root{color-scheme:light dark;--bg:light-dark(#f3f4f5,#0d0f11);--ink:light-dark(#111417,#eef1f3);--mute:light-dark(#5a646d,#98a3ac);--line:light-dark(#d8dce0,#252a2f);--panel:light-dark(#fff,#15181b);--con:#121518;--con2:#1b1f23;--cink:#f2f4f5;--cmute:#8e99a2;--acc:#ff5a1f;--hr:#ff3b6b;--cyan:#3cc6e6}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Barlow,system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(24px,4vw,56px) max(5vw,16px)}
+.wrap{max-width:1240px;margin:0 auto}
+h1,h2,.num{font-family:"Barlow Condensed",Barlow,sans-serif;font-weight:600;letter-spacing:.01em}
+h1{font-size:clamp(34px,5vw,50px);line-height:1.05;margin:0;text-wrap:balance}
+h2{font-size:30px;line-height:1.1;margin:0 0 6px}
+.sub{color:var(--mute);margin:4px 0 0}
+.top{padding-bottom:20px}
+.head{display:flex;flex-wrap:wrap;gap:20px 40px;align-items:flex-end;justify-content:space-between}
+.week{display:flex;flex-wrap:wrap;gap:12px 32px}
+.week div{display:grid}.week b{font:600 32px/1 "Barlow Condensed",sans-serif}.week span{color:var(--mute);font-size:14px}.week i{font-style:normal;font-size:13px;color:var(--mute)}
+.console{background:var(--con);color:var(--cink);padding-top:clamp(20px,3vw,36px)}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px}
+button,.file{font:600 16px Barlow,sans-serif;min-height:44px;padding:0 18px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+button:focus-visible,.file:focus-within,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--cyan);outline-offset:2px}
+.console button{background:var(--con2);color:var(--cink);border-color:#2c3238}
+.console button.go{background:var(--acc);border-color:var(--acc);color:#fff}
+button.go{background:var(--acc);border-color:var(--acc);color:#fff}
+button:disabled{opacity:.45;cursor:default}
+.dot{width:10px;height:10px;border-radius:50%;background:#4a535b;flex:none}
+.on .dot{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.chip{display:inline-flex;gap:8px;align-items:center;font-size:14px;color:var(--cmute);padding:0 4px}
+.chip.on{color:var(--cink)}
+.read{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(0,1fr));gap:2px;background:#262c31;border-radius:12px;overflow:hidden}
+.tile{background:var(--con2);padding:14px 16px;display:grid;align-content:space-between;gap:4px}
+.tile span{font-size:14px;color:var(--cmute)}
+.tile b{font:600 clamp(36px,5vw,54px)/1 "Barlow Condensed",sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tile small{font-size:15px;color:var(--cmute);margin-left:4px;font-weight:500}
+.tile.big{grid-row:span 2;background:linear-gradient(160deg,#1f2428,#16191c)}
+.tile.big b{font-size:clamp(72px,11vw,132px);color:var(--acc)}
+.tile.hr b{color:var(--hr)}
+.fig{position:relative;min-height:170px}.fig>svg{position:absolute;inset:0;width:100%;height:100%}
+.trace{margin-top:14px;background:var(--con2);border-radius:12px;min-height:150px}
+.legend{display:flex;gap:18px;font-size:14px;color:var(--cmute);margin-top:8px;flex-wrap:wrap}
+.legend b{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:6px}
+.ctrl{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;align-items:center}
+.ctrl .state{margin-left:auto;color:var(--cmute);font-size:15px}
+.note{margin-top:12px;font-size:15px;color:#ffc9b5;max-width:70ch}
+.note:empty{display:none}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:28px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.wk{display:grid;grid-template-columns:4.5em minmax(0,1fr) 4.5em;gap:10px;align-items:center;font-size:14px;margin:7px 0}
+.wk .t{height:16px;background:var(--line);border-radius:4px;overflow:hidden}.wk .t i{display:block;height:100%;background:var(--acc);border-radius:4px}
+.wk em{font-style:normal;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.wk.cur span{font-weight:600}
+.pw{min-height:220px}
+.empty{color:var(--mute);font-size:15px}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{font-size:13px;color:var(--mute);font-weight:600}
+th:first-child,td:first-child,th:last-child,td:last-child{text-align:left}
+tbody tr{cursor:pointer}tbody tr:hover{background:light-dark(#f7f8f9,#1a1e22)}
+.src{font-size:13px;color:var(--mute)}
+.tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.file input{position:absolute;opacity:0;width:1px;height:1px}
+ol{padding-left:1.3em;max-width:70ch}ol li{margin:4px 0}
+.grp{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.grp input{width:22px;height:22px}
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);padding:0;width:min(640px,94vw)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog form{padding:20px 22px}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin:14px 0}
+label.f{display:grid;gap:4px;font-size:14px;color:var(--mute)}
+input,select,textarea{font:16px Barlow,sans-serif;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);min-height:44px;width:100%}
+.full{grid-column:1/-1}
+.dfig{background:var(--con);border-radius:10px;min-height:150px}
+.row{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.row .del{margin-right:auto;color:var(--hr)}
+.status{font-size:14px;color:var(--mute);margin-top:8px}
+pre,.scroll{overflow-x:auto}
+@media(max-width:860px){.grid2{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:600px){.read{grid-template-columns:repeat(2,minmax(0,1fr))}.tile.big{grid-column:1/-1;grid-row:auto}.fields{grid-template-columns:minmax(0,1fr)}.ctrl .state{margin-left:0;width:100%}
+table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:8em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;white-space:normal;color:var(--mute)}.stack td:empty{display:none}}
+@media(prefers-reduced-motion:no-preference){.tile b{transition:color .3s}}
+</style>
+<script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script>
+</head>
+<body>
+<header class="band top"><div class="wrap head">
+  <div><h1>Indoor rides</h1><p class="sub">Schwinn IC4 · Galaxy Watch · Samsung Health</p></div>
+  <div class="week" id="week"></div>
+</div></header>
+
+<section class="band console"><div class="wrap">
+  <div class="bar">
+    <button id="bBike" type="button">Connect IC4</button>
+    <button id="bHr" type="button">Connect heart rate</button>
+    <span class="chip" id="cBike"><i class="dot"></i><span>Bike not connected</span></span>
+    <span class="chip" id="cHr"><i class="dot"></i><span>No heart rate</span></span>
+  </div>
+  <div class="read">
+    <div class="tile big"><span>Power</span><b id="vW">--<small>W</small></b></div>
+    <div class="tile"><span>Cadence</span><b id="vCad">--<small>rpm</small></b></div>
+    <div class="tile hr"><span>Heart rate</span><b id="vHr">--<small>bpm</small></b></div>
+    <div class="tile"><span>Ride time</span><b id="vT">0:00</b></div>
+    <div class="tile"><span>Distance</span><b id="vD">0.00<small class="u">mi</small></b></div>
+    <div class="tile"><span>Calories</span><b id="vK">0<small>kcal</small></b></div>
+    <div class="tile"><span>Speed · resistance</span><b id="vS">--<small class="uh">mph</small></b></div>
+  </div>
+  <div class="fig trace"><svg id="trace" aria-label="Live power and heart rate, last five minutes"></svg></div>
+  <div class="legend"><span><b style="background:var(--acc)"></b>Power</span><span><b style="background:var(--hr)"></b>Heart rate</span><span>Last 5 minutes</span></div>
+  <div class="ctrl">
+    <button id="bStart" class="go" type="button">Start ride</button>
+    <button id="bPause" type="button" disabled>Pause</button>
+    <button id="bFinish" type="button" disabled>Finish &amp; save</button>
+    <button id="bDiscard" type="button" disabled>Discard</button>
+    <button id="bManual" type="button">Log a ride by hand</button>
+    <button id="bDemo" type="button">Demo data</button>
+    <span class="state" id="state">Ready. Pedal time only counts while cadence is above zero.</span>
+  </div>
+  <p class="note" id="btNote"></p>
+</div></section>
+
+<section class="band"><div class="wrap grid2">
+  <div class="card"><h2>Weekly minutes</h2><p class="sub">Last 8 weeks, Monday start</p><div id="weeks"></div></div>
+  <div class="card"><h2>Average power by ride</h2><p class="sub">Your last 24 rides that recorded watts</p><div class="fig pw"><svg id="pw"></svg></div></div>
+</div></section>
+
+<section class="band" style="padding-top:0"><div class="wrap">
+  <div class="tools"><h2>Ride log</h2>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <select id="units" aria-label="Units"><option value="mi">Miles</option><option value="km">Kilometers</option></select>
+      <button id="bCsv" type="button">Copy as CSV</button>
+      <button id="bCopyR" type="button">Copy rides</button>
+      <button id="bPasteR" type="button">Paste rides</button>
+    </div></div>
+  <div class="scroll"><table class="stack" id="tbl"><thead><tr><th>Date</th><th>Time</th><th>Distance</th><th>Avg W</th><th>Cadence</th><th>Avg HR</th><th>Max HR</th><th>kcal</th><th>Source</th></tr></thead><tbody></tbody></table></div>
+  <p class="empty" id="emptyLog">No rides yet. Connect the bike and start a ride, log one by hand, or import from Samsung Health below.</p>
+  <p class="status" id="sync"></p>
+</div></section>
+
+<section class="band" style="padding-top:0"><div class="wrap grid2">
+  <div class="card"><h2>Import from Samsung Health</h2>
+    <p class="sub">Samsung Health doesn't connect to web pages, so workouts come in as its export file. Rides that match a bike ride here (within 15 minutes) pick up the watch's heart rate and calories.</p>
+    <ol>
+      <li>On your phone, open Samsung Health → ⋮ menu → Settings → <b>Download personal data</b>.</li>
+      <li>Open the folder it saves (usually Download/Samsung Health/…).</li>
+      <li>Pick the file named <b>com.samsung.shealth.exercise.…csv</b> below.</li>
+    </ol>
+    <label class="file">Choose exercise CSV<input type="file" id="shFile" accept=".csv,text/csv"></label>
+  </div>
+  <div class="card"><h2>Live heart rate from the watch</h2>
+    <p class="sub">Galaxy Watch doesn't broadcast heart rate on its own. Install a broadcaster app on the watch, start it, then tap <b>Connect heart rate</b> above.</p>
+    <ol>
+      <li>Install <a href="https://play.google.com/store/apps/details?id=lukas.the.coder.heartforbluetooth">Heart for Bluetooth</a> (or a similar app) on the watch.</li>
+      <li>Start broadcasting on the watch before your ride.</li>
+      <li>The IC4's included armband works too: same button.</li>
+    </ol>
+    <p class="sub">Bluetooth needs Chrome or Edge on Android, Windows, Mac or ChromeOS. iPhone and iPad browsers can't connect, but logging and import still work there.</p>
+  </div>
+</div>
+<div class="wrap"><div class="card" id="shPrev" style="margin-top:20px;display:none"></div></div></section>
+
+<dialog id="pdlg"><form id="pf" method="dialog">
+  <h2>Paste rides</h2>
+  <p class="sub">Paste the text from "Copy rides" on your other device. Rides you already have are kept; new ones are added.</p>
+  <label class="f full">Rides text<textarea id="pText" rows="6"></textarea></label>
+  <p class="status" id="pMsg"></p>
+  <div class="row"><button type="submit" value="cancel" formnovalidate>Close</button><button type="submit" value="go" class="go">Add rides</button></div>
+</form></dialog>
+
+<dialog id="dlg"><form id="rf" method="dialog">
+  <h2 id="dlgT">Ride</h2>
+  <div class="fig dfig" id="dfigBox"><svg id="dsvg"></svg></div>
+  <div class="fields">
+    <label class="f">Start<input type="datetime-local" id="fStart" required></label>
+    <label class="f">Duration (minutes)<input type="number" id="fDur" min="1" step="0.1" required></label>
+    <label class="f">Distance (<span class="u">mi</span>)<input type="number" id="fDist" min="0" step="0.01"></label>
+    <label class="f">Avg power (W)<input type="number" id="fW" min="0"></label>
+    <label class="f">Avg cadence (rpm)<input type="number" id="fCad" min="0"></label>
+    <label class="f">Calories (kcal)<input type="number" id="fK" min="0"></label>
+    <label class="f">Avg heart rate<input type="number" id="fHr" min="0"></label>
+    <label class="f">Max heart rate<input type="number" id="fMhr" min="0"></label>
+    <label class="f full">Notes<textarea id="fNotes" rows="2" placeholder="Class, program, how it felt"></textarea></label>
+  </div>
+  <div class="row">
+    <button type="button" class="del" id="bDel">Delete</button>
+    <button type="submit" value="cancel" formnovalidate>Cancel</button>
+    <button type="submit" value="save" class="go">Save ride</button>
+  </div>
+</form></dialog>
+
+<script>
+{
+const $=s=>document.querySelector(s);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let units=LS.get('units','mi');
+let rides=[];let col=null;let dbOn=false;
+const newId=()=>'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const KM=0.621371;
+const dist=km=>km==null?null:(units==='mi'?km*KM:km);
+const fmtDur=s=>{s=Math.round(s||0);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h?`${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`:`${m}:${String(x).padStart(2,'0')}`};
+const n0=v=>v==null||v===''||isNaN(v)?'':Math.round(v);
+const num=v=>{const x=parseFloat(v);return isNaN(x)?null:x};
+
+/* ---------- storage ---------- */
+function sorted(){return rides.slice().sort((a,b)=>new Date(b.start)-new Date(a.start))}
+async function save(r){
+  r=JSON.parse(JSON.stringify(r));
+  const i=rides.findIndex(x=>x.id===r.id);if(i>=0)rides[i]=r;else rides.push(r);
+  renderAll();
+  if(dbOn){try{await col.doc(r.id).set(r)}catch(e){$('#sync').textContent='Could not save to your account ('+(e.code||'error')+'). It is kept in this browser for now.';LS.set('rides',rides)}}
+  else LS.set('rides',rides);
+}
+async function remove(id){
+  rides=rides.filter(x=>x.id!==id);renderAll();
+  if(dbOn){try{await col.doc(id).delete()}catch(e){}}else LS.set('rides',rides);
+}
+rides=LS.get('rides',[]);
+(async()=>{
+  const C=window.claude;
+  const db=C&&C.use?await C.use('db'):null;const user=C&&C.use?await C.use('user'):null;
+  const uid=user?await user.id():null;
+  if(!db||!uid){$('#sync').textContent=C?'Saving in this browser only (account storage is not available in this view).':'Saving on this phone. Use "Copy rides" below, then "Paste rides" in your Claude ride log, to keep everything in one place.';return}
+  col=db.collection('data/users/'+uid);dbOn=true;
+  const local=rides.slice();
+  $('#sync').textContent='Loading your rides…';
+  const t=setTimeout(()=>{$('#sync').textContent='Your saved rides can\'t be reached yet. Anything new will sync when the connection returns.'},10000);
+  let first=true;
+  col.onSnapshot(s=>{
+    if(!s.metadata.fromCache){clearTimeout(t);$('#sync').textContent='Saved to your account, private to you.'}
+    rides=s.docs.map(d=>({...d.data(),id:d.id})).filter(r=>r.start);
+    if(first&&!s.metadata.fromCache){first=false;
+      const miss=local.filter(l=>!rides.some(r=>r.id===l.id));
+      (async()=>{for(const r of miss){try{await col.doc(r.id).set(r)}catch(e){}}if(miss.length)LS.set('rides',[])})();
+    }
+    renderAll();
+  },e=>{clearTimeout(t);dbOn=false;$('#sync').textContent='Account storage stopped ('+e.code+'). Saving in this browser instead.'});
+})();
+
+/* ---------- summaries ---------- */
+function weekStart(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x}
+function sumRides(list){const o={n:list.length,min:0,kcal:0,w:0,wn:0};for(const r of list){o.min+=(r.durSec||0)/60;o.kcal+=r.kcal||0;if(r.avgW){o.w+=r.avgW*(r.durSec||1);o.wn+=(r.durSec||1)}}o.avgW=o.wn?o.w/o.wn:null;return o}
+function renderWeek(){
+  const ws=weekStart(new Date()),pws=new Date(ws);pws.setDate(pws.getDate()-7);
+  const cur=sumRides(rides.filter(r=>new Date(r.start)>=ws)),prev=sumRides(rides.filter(r=>{const d=new Date(r.start);return d>=pws&&d<ws}));
+  const delta=(a,b,u)=>{if(!b)return 'first week logged';const d=Math.round(a-b);return (d>=0?'+':'−')+Math.abs(d)+u+' vs last week'};
+  const items=[[cur.n,'rides this week',delta(cur.n,prev.n,'')],[Math.round(cur.min),'minutes',delta(cur.min,prev.min,' min')],[Math.round(cur.kcal),'kcal',delta(cur.kcal,prev.kcal,'')],[cur.avgW?Math.round(cur.avgW):'--','avg watts',cur.avgW&&prev.avgW?delta(cur.avgW,prev.avgW,' W'):'']];
+  $('#week').innerHTML=items.map(i=>`<div><b>${esc(i[0])}</b><span>${esc(i[1])}</span><i>${esc(i[2])}</i></div>`).join('');
+}
+function renderWeeks(){
+  const ws=weekStart(new Date());const rows=[];
+  for(let k=7;k>=0;k--){const a=new Date(ws);a.setDate(a.getDate()-7*k);const b=new Date(a);b.setDate(b.getDate()+7);
+    rows.push({a,min:sumRides(rides.filter(r=>{const d=new Date(r.start);return d>=a&&d<b})).min,cur:k===0})}
+  const mx=Math.max(60,...rows.map(r=>r.min));
+  $('#weeks').innerHTML=rows.map(r=>`<div class="wk${r.cur?' cur':''}"><span>${r.a.toLocaleDateString(undefined,{month:'short',day:'numeric'})}</span><div class="t"><i style="width:${(r.min/mx*100).toFixed(1)}%"></i></div><em>${Math.round(r.min)} min</em></div>`).join('');
+}
+function renderTable(){
+  const list=sorted();$('#emptyLog').style.display=list.length?'none':'';
+  $('#tbl tbody').innerHTML=list.map(r=>{const d=new Date(r.start);const ds=dist(r.distKm);
+    return `<tr data-id="${esc(r.id)}" tabindex="0"><td>${esc(d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}))} <span class="src">${esc(d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}))}</span></td><td>${esc(fmtDur(r.durSec))}</td><td>${ds?esc(ds.toFixed(2)+' '+units):''}</td><td>${esc(n0(r.avgW))}</td><td>${esc(n0(r.avgCad))}</td><td>${esc(n0(r.avgHr))}</td><td>${esc(n0(r.maxHr))}</td><td>${esc(n0(r.kcal))}</td><td class="src">${esc(r.source||'')}</td></tr>`}).join('');
+}
+function drawPw(){
+  const s=$('#pw'),W=s.clientWidth,H=s.clientHeight;if(!W)return;
+  const pts=sorted().filter(r=>r.avgW).slice(0,24).reverse();
+  if(pts.length<2){s.innerHTML=`<text x="0" y="24" fill="currentColor" opacity=".6" font-size="15">Two or more rides with power will draw a trend here.</text>`;return}
+  const L=W<520?30:40,R=10,T=14,B=26,vals=pts.map(p=>p.avgW),lo=Math.max(0,Math.floor((Math.min(...vals)-20)/25)*25),hi=Math.ceil((Math.max(...vals)+20)/25)*25;
+  const x=i=>L+(W-L-R)*i/(pts.length-1),y=v=>T+(H-T-B)*(1-(v-lo)/(hi-lo));
+  let g='';for(let v=lo;v<=hi;v+=(hi-lo)/4){g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end" font-size="12" fill="var(--mute)">${Math.round(v)}</text>`}
+  const d=pts.map((p,i)=>(i?'L':'M')+x(i).toFixed(1)+' '+y(p.avgW).toFixed(1)).join('');
+  const lab=[0,pts.length-1].map(i=>`<text x="${x(i)}" y="${H-6}" font-size="12" fill="var(--mute)" text-anchor="${i?'end':'start'}">${esc(new Date(pts[i].start).toLocaleDateString(undefined,{month:'short',day:'numeric'}))}</text>`).join('');
+  s.innerHTML=g+`<path d="${d}" fill="none" stroke="var(--acc)" stroke-width="2.5"/>`+pts.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.avgW)}" r="3.5" fill="var(--acc)"><title>${esc(Math.round(p.avgW)+' W')}</title></circle>`).join('')+lab;
+}
+function renderAll(){renderWeek();renderWeeks();renderTable();drawPw();document.querySelectorAll('.u').forEach(e=>e.textContent=units);document.querySelectorAll('.uh').forEach(e=>e.textContent=units==='mi'?'mph':'km/h')}
+const roPw=new ResizeObserver(drawPw);roPw.observe($('#pw'));
+
+/* ---------- trace drawing (live + detail) ---------- */
+function drawTrace(s,arr,span){
+  const W=s.clientWidth,H=s.clientHeight;if(!W)return;
+  if(!arr||arr.length<2){s.innerHTML=`<text x="14" y="${H/2}" font-size="15" fill="#8e99a2">Power and heart rate will trace here while you ride.</text>`;return}
+  const t0=span?arr[arr.length-1][0]-span:arr[0][0],t1=arr[arr.length-1][0],dt=Math.max(1,t1-t0);
+  const wMax=Math.max(250,...arr.map(a=>a[1]||0))*1.1;
+  const x=t=>8+(W-16)*(t-t0)/dt,yw=v=>H-10-(H-20)*(v/wMax),yh=v=>H-10-(H-20)*((v-50)/150);
+  const line=(f,k)=>{let d='',pen=false;for(const a of arr){if(a[0]<t0)continue;const v=a[k];if(v==null||(k===3&&!v)){pen=false;continue}d+=(pen?'L':'M')+x(a[0]).toFixed(1)+' '+f(v).toFixed(1);pen=true}return d};
+  s.innerHTML=`<line x1="8" x2="${W-8}" y1="${yw(wMax/1.1/2)}" y2="${yw(wMax/1.1/2)}" stroke="#2b3136" stroke-dasharray="3 5"/><path d="${line(yw,1)}" fill="none" stroke="var(--acc)" stroke-width="2.5"/><path d="${line(yh,3)}" fill="none" stroke="var(--hr)" stroke-width="2"/>`;
+}
+
+/* ---------- live ride ---------- */
+const cur={w:null,cad:null,kmh:null,res:null,hrBike:null,hrDev:null};
+const R={running:false,paused:false,start:null,sec:0,trace:[],samples:[],wSum:0,wN:0,cadSum:0,hrSum:0,hrN:0,maxW:0,maxHr:0,kj:0,km:0};
+let bikeOn=false,hrOn=false,demo=null,wake=null,timer=null;
+const hrNow=()=>cur.hrDev??cur.hrBike;
+function setChip(id,on,text){const c=$(id);c.classList.toggle('on',on);c.querySelector('span').textContent=text}
+function note(t){$('#btNote').textContent=t}
+function show(){
+  $('#vW').firstChild.nodeValue=cur.w!=null?Math.round(cur.w):'--';
+  $('#vCad').firstChild.nodeValue=cur.cad!=null?Math.round(cur.cad):'--';
+  const h=hrNow();$('#vHr').firstChild.nodeValue=h?Math.round(h):'--';
+  $('#vT').textContent=fmtDur(R.sec);
+  $('#vD').firstChild.nodeValue=dist(R.km).toFixed(2);
+  $('#vK').firstChild.nodeValue=Math.round(R.kj);
+  const sp=cur.kmh!=null?(units==='mi'?cur.kmh*KM:cur.kmh).toFixed(1):'--';
+  $('#vS').firstChild.nodeValue=sp+(cur.res!=null?' · '+cur.res:'');
+}
+function tick(){
+  const h=hrNow(),moving=(cur.cad||0)>0||(!bikeOn&&!demo);
+  if(R.running&&!R.paused&&moving){
+    R.sec++;
+    if(cur.w!=null){R.wSum+=cur.w;R.wN++;R.maxW=Math.max(R.maxW,cur.w);R.kj+=cur.w/1000}
+    if(cur.cad)R.cadSum+=cur.cad;
+    if(h){R.hrSum+=h;R.hrN++;R.maxHr=Math.max(R.maxHr,h)}
+    if(cur.kmh)R.km+=cur.kmh/3600;
+    if(R.sec%5===0)R.samples.push([R.sec,cur.w==null?null:Math.round(cur.w),cur.cad==null?null:Math.round(cur.cad),h?Math.round(h):null]);
+  }
+  R.trace.push([Date.now()/1000,cur.w,cur.cad,h]);if(R.trace.length>320)R.trace.shift();
+  $('#state').textContent=R.running?(R.paused?'Paused.':moving?'Riding. Recording.':'Waiting for you to pedal…'):(bikeOn||demo?'Connected. Press Start when you\'re ready.':'Ready. Pedal time only counts while cadence is above zero.');
+  show();drawTrace($('#trace'),R.trace,300);
+}
+timer=setInterval(tick,1000);
+const roT=new ResizeObserver(()=>drawTrace($('#trace'),R.trace,300));roT.observe($('#trace'));
+
+function parseBike(v){
+  try{let f=v.getUint16(0,true),o=2;
+    if(!(f&1)){cur.kmh=v.getUint16(o,true)/100;o+=2}
+    if(f&2)o+=2;
+    if(f&4){cur.cad=v.getUint16(o,true)/2;o+=2}
+    if(f&8)o+=2;
+    if(f&16)o+=3;
+    if(f&32){cur.res=v.getInt16(o,true);o+=2}
+    if(f&64){cur.w=Math.max(0,v.getInt16(o,true));o+=2}
+    if(f&128)o+=2;
+    if(f&256)o+=5;
+    if(f&512){const h=v.getUint8(o);cur.hrBike=h||null;o+=1}
+  }catch(e){}
+}
+function parseHr(v,key){try{const f=v.getUint8(0);const h=f&1?v.getUint16(1,true):v.getUint8(1);cur[key]=h||null}catch(e){}}
+function btErr(e){
+  if(e&&e.name==='NotFoundError')return;
+  if(e&&e.name==='SecurityError')note(window.claude?'Bluetooth doesn\'t work inside Claude\'s viewer. Use your standalone ride log in Chrome to connect the bike, then "Copy rides" there and "Paste rides" here.':'Chrome blocked Bluetooth for this page. Check that Bluetooth and Location are on, and that Chrome has the Nearby devices permission.');
+  else note('Bluetooth error: '+(e&&e.message||e));
+}
+function needBt(){if(navigator.bluetooth)return true;note('This browser can\'t use Bluetooth. Open this page in Chrome or Edge on Android, Windows, Mac or ChromeOS to connect the IC4 and your watch.');return false}
+async function connectBike(){
+  if(!needBt())return;note('');
+  try{
+    const dev=await navigator.bluetooth.requestDevice({filters:[{services:['fitness_machine']},{namePrefix:'IC Bike'}],optionalServices:['fitness_machine','heart_rate']});
+    setChip('#cBike',false,'Connecting to '+(dev.name||'bike')+'…');
+    dev.addEventListener('gattserverdisconnected',()=>{bikeOn=false;cur.w=cur.cad=cur.kmh=cur.res=cur.hrBike=null;setChip('#cBike',false,'Bike disconnected');$('#bBike').textContent='Reconnect IC4'});
+    const srv=await dev.gatt.connect();
+    const ch=await(await srv.getPrimaryService('fitness_machine')).getCharacteristic('indoor_bike_data');
+    ch.addEventListener('characteristicvaluechanged',e=>parseBike(e.target.value));await ch.startNotifications();
+    bikeOn=true;setChip('#cBike',true,(dev.name||'IC4')+' connected');$('#bBike').textContent='Bike connected';
+    try{const h=await(await srv.getPrimaryService('heart_rate')).getCharacteristic('heart_rate_measurement');h.addEventListener('characteristicvaluechanged',e=>parseHr(e.target.value,'hrBike'));await h.startNotifications()}catch(e){}
+    tryWake();
+  }catch(e){setChip('#cBike',false,'Bike not connected');btErr(e)}
+}
+async function connectHr(){
+  if(!needBt())return;note('');
+  try{
+    const dev=await navigator.bluetooth.requestDevice({filters:[{services:['heart_rate']}]});
+    dev.addEventListener('gattserverdisconnected',()=>{hrOn=false;cur.hrDev=null;setChip('#cHr',false,'Heart rate disconnected')});
+    const srv=await dev.gatt.connect();
+    const ch=await(await srv.getPrimaryService('heart_rate')).getCharacteristic('heart_rate_measurement');
+    ch.addEventListener('characteristicvaluechanged',e=>parseHr(e.target.value,'hrDev'));await ch.startNotifications();
+    hrOn=true;setChip('#cHr',true,(dev.name||'Heart rate')+' connected');
+  }catch(e){btErr(e)}
+}
+async function tryWake(){try{if('wakeLock' in navigator&&!wake)wake=await navigator.wakeLock.request('screen')}catch(e){}}
+function resetRide(){Object.assign(R,{running:false,paused:false,start:null,sec:0,samples:[],wSum:0,wN:0,cadSum:0,hrSum:0,hrN:0,maxW:0,maxHr:0,kj:0,km:0});btns()}
+function btns(){$('#bStart').disabled=R.running;$('#bPause').disabled=!R.running;$('#bFinish').disabled=!R.running;$('#bDiscard').disabled=!R.running;$('#bPause').textContent=R.paused?'Resume':'Pause'}
+$('#bStart').onclick=()=>{resetRide();R.running=true;R.start=new Date();btns();tryWake()};
+$('#bPause').onclick=()=>{R.paused=!R.paused;btns()};
+let discardArm=false;
+$('#bDiscard').onclick=()=>{if(!discardArm){discardArm=true;$('#bDiscard').textContent='Tap again to discard';setTimeout(()=>{discardArm=false;$('#bDiscard').textContent='Discard'},3000);return}discardArm=false;$('#bDiscard').textContent='Discard';resetRide()};
+$('#bFinish').onclick=async()=>{
+  if(R.sec<30){$('#state').textContent='Under 30 seconds of pedaling. Keep going or discard.';return}
+  const r={id:newId(),start:R.start.toISOString(),durSec:R.sec,distKm:R.km?+R.km.toFixed(3):null,avgW:R.wN?+(R.wSum/R.wN).toFixed(1):null,maxW:R.maxW||null,avgCad:R.sec?+(R.cadSum/R.sec).toFixed(1):null,avgHr:R.hrN?+(R.hrSum/R.hrN).toFixed(1):null,maxHr:R.maxHr||null,kcal:R.kj?Math.round(R.kj):null,source:demo?'Demo':'IC4 live',notes:'',samples:R.samples};
+  resetRide();await save(r);$('#state').textContent='Ride saved.';
+};
+$('#bBike').onclick=connectBike;$('#bHr').onclick=connectHr;
+$('#bDemo').onclick=()=>{
+  if(demo){clearInterval(demo);demo=null;cur.w=cur.cad=cur.kmh=cur.hrDev=null;$('#bDemo').textContent='Demo data';return}
+  let t=0;$('#bDemo').textContent='Stop demo';
+  demo=setInterval(()=>{t++;const surge=Math.sin(t/40)>0.6?60:0;cur.cad=82+Math.sin(t/7)*6+Math.random()*3;cur.w=150+surge+Math.sin(t/9)*15+Math.random()*8;cur.kmh=cur.cad*0.36;cur.hrDev=Math.min(172,105+t*0.15+surge*0.3+Math.random()*2)},1000);
+};
+
+/* ---------- ride dialog ---------- */
+let editId=null,delArm=false;
+const pad=x=>String(x).padStart(2,'0');
+const toLocal=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function openRide(r){
+  editId=r?r.id:null;delArm=false;$('#bDel').textContent='Delete';$('#bDel').style.display=r?'':'none';
+  $('#dlgT').textContent=r?new Date(r.start).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}):'Log a ride';
+  const d=r?new Date(r.start):new Date(Date.now()-45*60000);
+  $('#fStart').value=toLocal(d);$('#fDur').value=r?+(r.durSec/60).toFixed(1):45;
+  $('#fDist').value=r&&r.distKm!=null?dist(r.distKm).toFixed(2):'';
+  $('#fW').value=r?n0(r.avgW):'';$('#fCad').value=r?n0(r.avgCad):'';$('#fK').value=r?n0(r.kcal):'';
+  $('#fHr').value=r?n0(r.avgHr):'';$('#fMhr').value=r?n0(r.maxHr):'';$('#fNotes').value=r?r.notes||'':'';
+  const has=r&&r.samples&&r.samples.length>1;$('#dfigBox').style.display=has?'':'none';
+  $('#dlg').showModal();if(has)requestAnimationFrame(()=>drawTrace($('#dsvg'),r.samples,0));
+}
+const roD=new ResizeObserver(()=>{const r=rides.find(x=>x.id===editId);if(r&&r.samples)drawTrace($('#dsvg'),r.samples,0)});roD.observe($('#dsvg'));
+$('#rf').addEventListener('submit',async e=>{
+  if(!e.submitter||e.submitter.value!=='save')return;
+  e.preventDefault();
+  const old=rides.find(x=>x.id===editId)||{};
+  const dv=num($('#fDist').value);
+  const r={...old,id:editId||newId(),start:new Date($('#fStart').value).toISOString(),durSec:Math.round((num($('#fDur').value)||0)*60),distKm:dv==null?null:+(units==='mi'?dv/KM:dv).toFixed(3),avgW:num($('#fW').value),avgCad:num($('#fCad').value),kcal:num($('#fK').value),avgHr:num($('#fHr').value),maxHr:num($('#fMhr').value),notes:$('#fNotes').value.trim(),source:old.source||'Manual'};
+  $('#dlg').close();await save(r);
+});
+$('#bDel').onclick=async()=>{if(!delArm){delArm=true;$('#bDel').textContent='Tap again to delete';return}$('#dlg').close();await remove(editId)};
+$('#bManual').onclick=()=>openRide(null);
+$('#tbl tbody').addEventListener('click',e=>{const tr=e.target.closest('tr');if(tr)openRide(rides.find(r=>r.id===tr.dataset.id))});
+$('#tbl tbody').addEventListener('keydown',e=>{if(e.key==='Enter'){const tr=e.target.closest('tr');if(tr)openRide(rides.find(r=>r.id===tr.dataset.id))}});
+
+/* ---------- units + CSV ---------- */
+$('#units').value=units;
+$('#units').onchange=e=>{units=e.target.value;LS.set('units',units);renderAll();show()};
+$('#bCsv').onclick=async()=>{
+  const h=['date','duration_min','distance_'+units,'avg_watts','max_watts','avg_cadence','avg_hr','max_hr','kcal','source','notes'];
+  const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const rows=sorted().map(r=>[r.start,(r.durSec/60).toFixed(1),r.distKm!=null?dist(r.distKm).toFixed(2):'',n0(r.avgW),n0(r.maxW),n0(r.avgCad),n0(r.avgHr),n0(r.maxHr),n0(r.kcal),r.source,r.notes].map(q).join(','));
+  try{await navigator.clipboard.writeText([h.join(','),...rows].join('\n'));$('#bCsv').textContent='Copied'}catch(e){$('#bCsv').textContent='Copy blocked'}
+  setTimeout(()=>$('#bCsv').textContent='Copy as CSV',2000);
+};
+
+$('#bCopyR').onclick=async()=>{
+  const txt='RIDELOG1'+JSON.stringify(sorted());
+  try{await navigator.clipboard.writeText(txt);$('#bCopyR').textContent='Copied '+rides.length+' rides'}catch(e){$('#bCopyR').textContent='Copy blocked'}
+  setTimeout(()=>$('#bCopyR').textContent='Copy rides',2500);
+};
+$('#bPasteR').onclick=()=>{$('#pText').value='';$('#pMsg').textContent='';$('#pdlg').showModal()};
+$('#pf').addEventListener('submit',async e=>{
+  if(!e.submitter||e.submitter.value!=='go')return;
+  e.preventDefault();
+  let t=$('#pText').value.trim();if(t.startsWith('RIDELOG1'))t=t.slice(8);
+  let list;try{list=JSON.parse(t)}catch(x){$('#pMsg').textContent='That text could not be read. Copy it again with "Copy rides".';return}
+  if(!Array.isArray(list)){$('#pMsg').textContent='That text could not be read.';return}
+  let add=0,skip=0;
+  for(const r of list){
+    if(!r||typeof r!=='object'||!r.start||!r.id||!/^[A-Za-z0-9_-]{1,60}$/.test(String(r.id))){skip++;continue}
+    if(rides.some(x=>x.id===r.id)){skip++;continue}
+    const c={id:String(r.id),start:String(r.start),durSec:num(r.durSec)||0,distKm:num(r.distKm),avgW:num(r.avgW),maxW:num(r.maxW),avgCad:num(r.avgCad),avgHr:num(r.avgHr),maxHr:num(r.maxHr),kcal:num(r.kcal),source:String(r.source||'Imported').slice(0,60),notes:String(r.notes||'').slice(0,500)};
+    if(r.shKey)c.shKey=String(r.shKey).slice(0,60);
+    if(Array.isArray(r.samples))c.samples=r.samples.filter(Array.isArray).slice(0,3000).map(s=>s.slice(0,4).map(v=>v==null?null:num(v)));
+    await save(c);add++;
+  }
+  $('#pMsg').textContent=`Added ${add} rides${skip?`, skipped ${skip} you already had`:''}.`;
+});
+
+/* ---------- Samsung Health import ---------- */
+function parseCSV(t){const out=[];let row=[],f='',q=false;for(let i=0;i<t.length;i++){const c=t[i];if(q){if(c==='"'){if(t[i+1]==='"'){f+='"';i++}else q=false}else f+=c}else if(c==='"')q=true;else if(c===','){row.push(f);f=''}else if(c==='\n'||c==='\r'){if(c==='\r'&&t[i+1]==='\n')i++;row.push(f);out.push(row);row=[];f=''}else f+=c}if(f||row.length){row.push(f);out.push(row)}return out}
+const TYPES={'11007':'Cycling','1001':'Walking','1002':'Running'};
+let shRows=[];
+$('#shFile').addEventListener('change',async e=>{
+  const file=e.target.files[0];if(!file)return;const box=$('#shPrev');box.style.display='';
+  const rows=parseCSV(await file.text());
+  const hi=rows.findIndex(r=>r.some(c=>/(^|\.)start_time$/.test(c.trim())));
+  if(hi<0){box.innerHTML='<h2>That file doesn\'t look like the exercise export</h2><p class="sub">Look for the file whose name starts with com.samsung.shealth.exercise in the export folder.</p>';return}
+  const hd=rows[hi].map(c=>c.trim()),ix=k=>hd.findIndex(h=>h===k||h.endsWith('.'+k));
+  const c={st:ix('start_time'),dur:ix('duration'),ty:ix('exercise_type'),kc:ix('calorie'),di:ix('distance'),hr:ix('mean_heart_rate'),mhr:ix('max_heart_rate'),cad:ix('mean_cadence'),pw:ix('mean_power')};
+  const g=(r,k)=>c[k]>=0?num(r[c[k]]):null;
+  shRows=rows.slice(hi+1).filter(r=>r.length>2&&r[c.st]).map(r=>{const raw=r[c.st].trim();let d=new Date(raw.replace(' ','T')+(/[zZ]|[+-]\d\d:?\d\d$/.test(raw)?'':'Z'));if(isNaN(d))d=new Date(raw);
+    return{key:raw,start:d,type:c.ty>=0?String(r[c.ty]).trim():'?',dur:Math.round((g(r,'dur')||0)/1000),kcal:g(r,'kc'),distKm:g(r,'di')?g(r,'di')/1000:null,avgHr:g(r,'hr')||null,maxHr:g(r,'mhr')||null,avgCad:g(r,'cad')||null,avgW:g(r,'pw')||null}}).filter(r=>!isNaN(r.start)&&r.dur>0);
+  const groups={};for(const r of shRows)(groups[r.type]=groups[r.type]||[]).push(r);
+  const keys=Object.keys(groups).sort((a,b)=>groups[b].length-groups[a].length);
+  box.innerHTML=`<h2>${shRows.length} workouts found</h2><p class="sub">Choose which workout types are your bike rides. Samsung labels them by number; open a type's newest date to check it against your memory.</p>`+
+    keys.map(k=>{const l=groups[k],nw=l.reduce((a,b)=>a.start>b.start?a:b);return `<label class="grp"><input type="checkbox" value="${esc(k)}" ${k==='11007'?'checked':''}><span><b>${esc(TYPES[k]||'Type '+k)}</b> · ${l.length} workouts · avg ${Math.round(l.reduce((s,r)=>s+r.dur,0)/l.length/60)} min · newest ${esc(nw.start.toLocaleDateString())}</span></label>`}).join('')+
+    `<div class="ctrl"><button class="go" id="bImp" type="button">Import selected</button><span class="state" id="impMsg"></span></div>`;
+  $('#bImp').onclick=async()=>{
+    const pick=[...box.querySelectorAll('input:checked')].map(i=>i.value);let add=0,mer=0,skip=0;
+    $('#bImp').disabled=true;
+    for(const r of shRows.filter(r=>pick.includes(r.type))){
+      if(rides.some(x=>x.shKey===r.key)){skip++;continue}
+      const near=rides.find(x=>!x.shKey&&Math.abs(new Date(x.start)-r.start)<15*60000);
+      if(near){await save({...near,shKey:r.key,avgHr:near.avgHr||r.avgHr,maxHr:near.maxHr||r.maxHr,kcal:near.kcal||r.kcal,source:(near.source||'Ride')+' + Samsung Health'});mer++}
+      else{await save({id:newId(),start:r.start.toISOString(),durSec:r.dur,distKm:r.distKm,avgW:r.avgW,maxW:null,avgCad:r.avgCad,avgHr:r.avgHr,maxHr:r.maxHr,kcal:r.kcal,source:'Samsung Health',shKey:r.key,notes:''});add++}
+    }
+    $('#bImp').disabled=false;
+    $('#impMsg').textContent=`Added ${add}, matched ${mer} to existing rides, skipped ${skip} already imported.`;
+  };
+  e.target.value='';
+});
+
+renderAll();show();btns();
+}
+</script>
+</body>
+</html>
