@@ -85,6 +85,23 @@ input,select,textarea{font:16px Barlow,sans-serif;padding:9px 10px;border-radius
 .row .del{margin-right:auto;color:var(--hr)}
 .status{font-size:14px;color:var(--mute);margin-top:8px}
 pre,.scroll{overflow-x:auto}
+#rm{display:none}
+body.ridemode>*:not(#rm):not(script):not(dialog){display:none}
+body.ridemode{background:var(--con);color:var(--cink)}
+body.ridemode #rm{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100vh;height:100dvh;padding:10px;gap:8px;background:var(--con)}
+.rmtop{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--cmute)}
+.rmtop .chip{font-size:13px}
+.rmgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;min-height:0}
+.rmt{background:var(--con2);border-radius:12px;padding:8px 12px;display:grid;align-content:center;justify-items:start;min-height:0;overflow:hidden}
+.rmt span{font-size:clamp(12px,2.6vmin,18px);color:var(--cmute)}
+.rmt b{font:600 clamp(34px,17vmin,170px)/1 "Barlow Condensed",sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rmt small{font-size:clamp(11px,2.4vmin,16px);color:var(--cmute)}
+#rmW{color:var(--acc)}#rmHr{color:var(--hr)}
+#rmCad.ok{color:var(--cyan)}#rmCad.lo{color:#ffb020}
+.rmctl{display:flex;gap:8px;flex-wrap:wrap}
+.rmctl button{min-height:40px;padding:0 14px;font-size:15px;background:var(--con2);color:var(--cink);border-color:#2c3238}
+.rmctl button.go{background:var(--acc);border-color:var(--acc);color:#fff}
+@media(max-aspect-ratio:3/4){.rmgrid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:860px){.grid2{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:600px){.read{grid-template-columns:repeat(2,minmax(0,1fr))}.tile.big{grid-column:1/-1;grid-row:auto}.fields{grid-template-columns:minmax(0,1fr)}.ctrl .state{margin-left:0;width:100%}
 table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:8em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;white-space:normal;color:var(--mute)}.stack td:empty{display:none}}
@@ -102,6 +119,7 @@ table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-bl
   <div class="bar">
     <button id="bBike" type="button">Connect IC4</button>
     <button id="bHr" type="button">Connect heart rate</button>
+    <button id="bRide" type="button">Ride mode</button>
     <span class="chip" id="cBike"><i class="dot"></i><span>Bike not connected</span></span>
     <span class="chip" id="cHr"><i class="dot"></i><span>No heart rate</span></span>
   </div>
@@ -167,6 +185,23 @@ table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-bl
   </div>
 </div>
 <div class="wrap"><div class="card" id="shPrev" style="margin-top:20px;display:none"></div></div></section>
+
+<section id="rm" aria-label="Ride mode">
+  <div class="rmtop"><span id="rmState">Ready</span><span id="rmBike" class="chip">Bike off</span><span id="rmHrSrc" class="chip">No heart rate</span><span>Cadence target 80–95</span></div>
+  <div class="rmgrid">
+    <div class="rmt"><span>Ride time</span><b id="rmT">0:00</b></div>
+    <div class="rmt"><span>Cadence <small>rpm</small></span><b id="rmCad">--</b></div>
+    <div class="rmt"><span>Power <small>watts</small></span><b id="rmW">--</b></div>
+    <div class="rmt"><span>Heart rate <small>bpm</small></span><b id="rmHr">--</b></div>
+  </div>
+  <div class="rmctl">
+    <button id="rmGo" class="go" type="button">Start ride</button>
+    <button id="rmFin" type="button" disabled>Finish &amp; save</button>
+    <button id="rmConn" type="button">Connect IC4</button>
+    <button id="rmConnHr" type="button">Connect heart rate</button>
+    <button id="rmExit" type="button">Full view</button>
+  </div>
+</section>
 
 <dialog id="pdlg"><form id="pf" method="dialog">
   <h2>Paste rides</h2>
@@ -298,7 +333,8 @@ const cur={w:null,cad:null,kmh:null,res:null,hrBike:null,hrDev:null};
 const R={running:false,paused:false,start:null,sec:0,trace:[],samples:[],wSum:0,wN:0,cadSum:0,hrSum:0,hrN:0,maxW:0,maxHr:0,kj:0,km:0};
 let bikeOn=false,hrOn=false,demo=null,wake=null,timer=null;
 const hrNow=()=>cur.hrDev??cur.hrBike;
-function setChip(id,on,text){const c=$(id);c.classList.toggle('on',on);c.querySelector('span').textContent=text}
+function setChip(id,on,text){const c=$(id);c.classList.toggle('on',on);c.querySelector('span').textContent=text;
+  const m=id==='#cBike'?$('#rmBike'):$('#rmHrSrc');if(m){m.textContent=text;m.classList.toggle('on',on)}}
 function note(t){$('#btNote').textContent=t}
 function show(){
   $('#vW').firstChild.nodeValue=cur.w!=null?Math.round(cur.w):'--';
@@ -309,6 +345,11 @@ function show(){
   $('#vK').firstChild.nodeValue=Math.round(R.kj);
   const sp=cur.kmh!=null?(units==='mi'?cur.kmh*KM:cur.kmh).toFixed(1):'--';
   $('#vS').firstChild.nodeValue=sp+(cur.res!=null?' · '+cur.res:'');
+  $('#rmT').textContent=fmtDur(R.sec);
+  $('#rmW').textContent=cur.w!=null?Math.round(cur.w):'--';
+  $('#rmHr').textContent=h?Math.round(h):'--';
+  const cd=$('#rmCad');cd.textContent=cur.cad!=null?Math.round(cur.cad):'--';
+  cd.className=cur.cad==null||cur.cad===0?'':cur.cad>=80&&cur.cad<=100?'ok':cur.cad<75?'lo':'';
 }
 function tick(){
   const h=hrNow(),moving=(cur.cad||0)>0||(!bikeOn&&!demo);
@@ -321,6 +362,7 @@ function tick(){
     if(R.sec%5===0)R.samples.push([R.sec,cur.w==null?null:Math.round(cur.w),cur.cad==null?null:Math.round(cur.cad),h?Math.round(h):null]);
   }
   R.trace.push([Date.now()/1000,cur.w,cur.cad,h]);if(R.trace.length>320)R.trace.shift();
+  $('#rmState').textContent=R.running?(R.paused?'Paused':moving?'Recording':'Waiting for pedaling'):'Ready';
   $('#state').textContent=R.running?(R.paused?'Paused.':moving?'Riding. Recording.':'Waiting for you to pedal…'):(bikeOn||demo?'Connected. Press Start when you\'re ready.':'Ready. Pedal time only counts while cadence is above zero.');
   show();drawTrace($('#trace'),R.trace,300);
 }
@@ -375,7 +417,8 @@ async function connectHr(){
 }
 async function tryWake(){try{if('wakeLock' in navigator&&!wake)wake=await navigator.wakeLock.request('screen')}catch(e){}}
 function resetRide(){Object.assign(R,{running:false,paused:false,start:null,sec:0,samples:[],wSum:0,wN:0,cadSum:0,hrSum:0,hrN:0,maxW:0,maxHr:0,kj:0,km:0});btns()}
-function btns(){$('#bStart').disabled=R.running;$('#bPause').disabled=!R.running;$('#bFinish').disabled=!R.running;$('#bDiscard').disabled=!R.running;$('#bPause').textContent=R.paused?'Resume':'Pause'}
+function btns(){$('#bStart').disabled=R.running;$('#bPause').disabled=!R.running;$('#bFinish').disabled=!R.running;$('#bDiscard').disabled=!R.running;$('#bPause').textContent=R.paused?'Resume':'Pause';
+  $('#rmGo').textContent=!R.running?'Start ride':R.paused?'Resume':'Pause';$('#rmFin').disabled=!R.running}
 $('#bStart').onclick=()=>{resetRide();R.running=true;R.start=new Date();btns();tryWake()};
 $('#bPause').onclick=()=>{R.paused=!R.paused;btns()};
 let discardArm=false;
@@ -386,6 +429,16 @@ $('#bFinish').onclick=async()=>{
   resetRide();await save(r);$('#state').textContent='Ride saved.';
 };
 $('#bBike').onclick=connectBike;$('#bHr').onclick=connectHr;
+$('#rmConn').onclick=connectBike;$('#rmConnHr').onclick=connectHr;
+$('#rmGo').onclick=()=>{if(!R.running)$('#bStart').click();else $('#bPause').click()};
+$('#rmFin').onclick=()=>{$('#bFinish').click();if(!R.running)$('#rmState').textContent='Ride saved'};
+function rideMode(on){document.body.classList.toggle('ridemode',on);LS.set('rideMode',on);
+  try{history.replaceState(null,'',on?'#ride':location.pathname+location.search)}catch(e){}
+  if(on)tryWake();requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')))}
+$('#bRide').onclick=()=>rideMode(true);$('#rmExit').onclick=()=>rideMode(false);
+if(location.hash==='#ride'||LS.get('rideMode',false))rideMode(true);
+window.addEventListener('hashchange',()=>rideMode(location.hash==='#ride'));
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&(R.running||bikeOn)){wake=null;tryWake()}});
 $('#bDemo').onclick=()=>{
   if(demo){clearInterval(demo);demo=null;cur.w=cur.cad=cur.kmh=cur.hrDev=null;$('#bDemo').textContent='Demo data';return}
   let t=0;$('#bDemo').textContent='Stop demo';
